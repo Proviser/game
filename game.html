@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Space Scavenger</title>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        #gameCanvas {
+            display: block;
+            margin: 0 auto;
+            background: #000;
+            border: 2px solid #333;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 16px;
+        }
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 0 10px;
+            font-size: 18px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div>Score: <span id="score">0</span></div>
+        <div>Level: <span id="level">1</span></div>
+        <div>Bricks: <span id="bricks">0</span></div>
+    </div>
+    
+    <canvas id="gameCanvas" width="400" height="500"></canvas>
+    
+    <div class="controls">
+        <button onclick="moveLeft()">⬅️ LEFT</button>
+        <button onclick="startBall()">🔄 START</button>
+        <button onclick="moveRight()">➡️ RIGHT</button>
+    </div>
+
+    <script>
+        // Игровые переменные
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let score = 0;
+        let level = 1;
+        let gameOver = false;
+        let ballMoving = false;
+        
+        // Размеры элементов
+        const platform = {
+            width: 80,
+            height: 15,
+            x: canvas.width / 2 - 40,
+            y: canvas.height - 30,
+            speed: 10
+        };
+        
+        const ball = {
+            x: canvas.width / 2,
+            y: canvas.height - 50,
+            radius: 8,
+            dx: 3,
+            dy: -3
+        };
+        
+        let bricks = [];
+        
+        // Цвета блоков
+        const brickColors = ['#A9A9A9', '#4169E1', '#32CD32', '#DC143C'];
+        const brickPoints = [10, 20, 50, 100];
+        
+        // Инициализация игры
+        function initGame() {
+            generateBricks();
+            draw();
+        }
+        
+        // Генерация блоков
+        function generateBricks() {
+            bricks = [];
+            const rows = 4 + level - 1;
+            const cols = 10;
+            const brickWidth = 36;
+            const brickHeight = 18;
+            const padding = 4;
+            
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    const brickType = row % brickColors.length;
+                    bricks.push({
+                        x: col * (brickWidth + padding) + padding,
+                        y: row * (brickHeight + padding) + 50,
+                        width: brickWidth,
+                        height: brickHeight,
+                        type: brickType,
+                        hits: 1,
+                        active: true
+                    });
+                }
+            }
+            updateBricksCount();
+        }
+        
+        // Основная отрисовка
+        function draw() {
+            // Очистка canvas
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Рисуем звезды на фоне
+            drawStars();
+            
+            // Рисуем блоки
+            bricks.forEach(brick => {
+                if (brick.active) {
+                    ctx.fillStyle = brickColors[brick.type];
+                    ctx.fillRect(brick.x, brick.y, brick.width, brick.height);
+                    ctx.strokeStyle = '#666';
+                    ctx.strokeRect(brick.x, brick.y, brick.width, brick.height);
+                    
+                    // Для прочных блоков рисуем крестик
+                    if (brick.hits > 1) {
+                        ctx.strokeStyle = '#FFF';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.moveTo(brick.x + 5, brick.y + 5);
+                        ctx.lineTo(brick.x + brick.width - 5, brick.y + brick.height - 5);
+                        ctx.moveTo(brick.x + brick.width - 5, brick.y + 5);
+                        ctx.lineTo(brick.x + 5, brick.y + brick.height - 5);
+                        ctx.stroke();
+                    }
+                }
+            });
+            
+            // Рисуем платформу
+            ctx.fillStyle = '#8A2BE2';
+            ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+            
+            // Рисуем мяч
+            ctx.fillStyle = '#FF4444';
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Если игра окончена
+            if (gameOver) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.fillStyle = '#FFF';
+                ctx.font = '24px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 20);
+                ctx.font = '16px Arial';
+                ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 10);
+                ctx.fillText('Press RESTART to play again', canvas.width / 2, canvas.height / 2 + 40);
+            }
+        }
+        
+        function drawStars() {
+            ctx.fillStyle = '#FFF';
+            for (let i = 0; i < 50; i++) {
+                const x = Math.random() * canvas.width;
+                const y = Math.random() * (canvas.height / 2);
+                const size = Math.random() * 2;
+                ctx.fillRect(x, y, size, size);
+            }
+        }
+        
+        // Игровой цикл
+        function gameLoop() {
+            if (gameOver) return;
+            
+            if (ballMoving) {
+                // Двигаем мяч
+                ball.x += ball.dx;
+                ball.y += ball.dy;
+                
+                // Столкновение со стенами
+                if (ball.x + ball.radius > canvas.width || ball.x - ball.radius < 0) {
+                    ball.dx = -ball.dx;
+                }
+                if (ball.y - ball.radius < 0) {
+                    ball.dy = -ball.dy;
+                }
+                
+                // Столкновение с платформой
+                if (ball.y + ball.radius > platform.y && 
+                    ball.y - ball.radius < platform.y + platform.height &&
+                    ball.x > platform.x && 
+                    ball.x < platform.x + platform.width) {
+                    ball.dy = -Math.abs(ball.dy);
+                }
+                
+                // Столкновение с блоками
+                bricks.forEach(brick => {
+                    if (brick.active && 
+                        ball.x + ball.radius > brick.x &&
+                        ball.x - ball.radius < brick.x + brick.width &&
+                        ball.y + ball.radius > brick.y &&
+                        ball.y - ball.radius < brick.y + brick.height) {
+                        
+                        brick.hits--;
+                        if (brick.hits <= 0) {
+                            brick.active = false;
+                            score += brickPoints[brick.type];
+                            document.getElementById('score').textContent = score;
+                            updateBricksCount();
+                        }
+                        
+                        ball.dy = -ball.dy;
+                    }
+                });
+                
+                // Проверка проигрыша
+                if (ball.y - ball.radius > canvas.height) {
+                    gameOver = true;
+                }
+                
+                // Проверка выигрыша уровня
+                const activeBricks = bricks.filter(brick => brick.active).length;
+                if (activeBricks === 0) {
+                    level++;
+                    score += 500; // Бонус за уровень
+                    document.getElementById('level').textContent = level;
+                    document.getElementById('score').textContent = score;
+                    generateBricks();
+                    resetBall();
+                    ballMoving = false;
+                }
+            }
+            
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function updateBricksCount() {
+            const activeBricks = bricks.filter(brick => brick.active).length;
+            document.getElementById('bricks').textContent = activeBricks;
+        }
+        
+        function resetBall() {
+            ball.x = canvas.width / 2;
+            ball.y = canvas.height - 50;
+            ball.dx = 3;
+            ball.dy = -3;
+        }
+        
+        // Управление
+        function moveLeft() {
+            platform.x = Math.max(0, platform.x - platform.speed);
+        }
+        
+        function moveRight() {
+            platform.x = Math.min(canvas.width - platform.width, platform.x + platform.speed);
+        }
+        
+        function startBall() {
+            if (!ballMoving && !gameOver) {
+                ballMoving = true;
+            }
+        }
+        
+        function restartGame() {
+            score = 0;
+            level = 1;
+            gameOver = false;
+            ballMoving = false;
+            document.getElementById('score').textContent = score;
+            document.getElementById('level').textContent = level;
+            resetBall();
+            generateBricks();
+        }
+        
+        // Обработчики клавиатуры
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') moveLeft();
+            if (e.key === 'ArrowRight') moveRight();
+            if (e.key === ' ') startBall();
+        });
+        
+        // Запуск игры
+        initGame();
+        gameLoop();
+    </script>
+</body>
+</html>
